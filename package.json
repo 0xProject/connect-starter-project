@@ -2,16 +2,16 @@
   "name": "0xConnectStarterProject",
   "version": "0.0.0",
   "description": "",
-  "main": "lib/src/index.js",
-  "types": "lib/src/index.d.ts",
   "scripts": {
     "api": "npm run build; node ./lib/server.js",
     "build": "tsc",
     "clean": "shx rm -rf _bundles lib",
-    "dev": "npm run build; node ./lib/index.js",
     "download_snapshot": "download --extract --strip 1 --out 0x_testrpc_snapshot ${npm_package_config_snapshot_url}",
     "lint": "tslint src/**/*.ts",
-    "testrpc": "testrpc -p 8545 --networkId 50 --db ./0x_testrpc_snapshot -m \"${npm_package_config_mnemonic}\""
+    "testrpc": "testrpc -p 8545 --networkId 50 --db ./0x_testrpc_snapshot -m \"${npm_package_config_mnemonic}\"",
+    "tutorial1": "npm run build; node ./lib/tutorials/intro/index.js",
+    "tutorial2:part1": "npm run build; node ./lib/tutorials/websocket/generate_initial_book.js; node ./lib/tutorials/websocket/index.js",
+    "tutorial2:part2": "npm run build; node ./lib/tutorials/websocket/generate_new_orders_with_interval.js"
   },
   "license": "Apache-2.0",
   "config": {
@@ -23,8 +23,8 @@
     "@types/body-parser": "^1.16.8",
     "@types/express": "^4.0.39",
     "@types/node": "^8.0.46",
+    "@types/websocket": "^0.0.35",
     "download-cli": "^1.0.5",
-    "npm-run-all": "^4.0.2",
     "shx": "^0.2.2",
     "tslint": "5.8.0",
     "typescript": "~2.6.1",
@@ -37,6 +37,7 @@
     "body-parser": "^1.18.2",
     "ethereumjs-testrpc": "4.0.1",
     "express": "^4.16.2",
-    "web3": "^0.20.0"
+    "web3": "^0.20.0",
+    "websocket": "^1.0.25"
   }
 }
