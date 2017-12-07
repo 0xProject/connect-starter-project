@@ -4,14 +4,10 @@ import {
     FeesRequest,
     FeesResponse,
     HttpClient,
-    OrderbookRequest,
-    OrderbookResponse,
-} from '@0xproject/connect';
-import {
     Order,
     SignedOrder,
-    ZeroEx,
-} from '0x.js';
+} from '@0xproject/connect';
+import {ZeroEx} from '0x.js';
 
 const mainAsync = async () => {
     try {
@@ -20,10 +16,9 @@ const mainAsync = async () => {
 
         // Instantiate 0x.js instance
         const zeroEx = new ZeroEx(provider);
-
         // Instantiate relayer client pointing to a local server on port 3000
-        const relayerApiUrl = 'http://localhost:3000';
-        const relayerClient = new HttpClient(relayerApiUrl);
+        const relayerHttpApiUrl = 'http://localhost:3000';
+        const relayerClient = new HttpClient(relayerHttpApiUrl);
 
         // Get contract addresses
         const WETH_ADDRESS = await zeroEx.etherToken.getContractAddressAsync();
@@ -57,6 +52,13 @@ const mainAsync = async () => {
         }));
         await Promise.all(setZrxAllowanceTxHashes.concat(setWethAllowanceTxHashes).map(tx => {
             return zeroEx.awaitTransactionMinedAsync(tx);
+        }));
+
+        // Send 1000 ZRX from zrxOwner to all other addresses
+        await Promise.all(wethOwnerAddresses.map(async (address, index) => {
+            const zrxToTransfer =  ZeroEx.toBaseUnitAmount(new BigNumber(1000), zrxTokenInfo.decimals);
+            const txHash = await zeroEx.token.transferAsync(ZRX_ADDRESS, zrxOwnerAddress, address, zrxToTransfer);
+            return zeroEx.awaitTransactionMinedAsync(txHash);
         }));
 
         // Deposit ETH and generate WETH tokens for each address in wethOwnerAddresses
@@ -114,56 +116,49 @@ const mainAsync = async () => {
             await relayerClient.submitOrderAsync(signedOrder);
         }));
 
-        // Generate orderbook request for ZRX/WETH pair
-        const orderbookRequest: OrderbookRequest = {
-            baseTokenAddress: ZRX_ADDRESS,
-            quoteTokenAddress: WETH_ADDRESS,
-        };
+        // Generate and submit orders with flat WETH/ZRX exchange rate
+        await Promise.all(wethOwnerAddresses.map(async (address, index) => {
+            const makerTokenAmount = ZeroEx.toBaseUnitAmount(new BigNumber(5), wethTokenInfo.decimals);
+            const takerTokenAmount = ZeroEx.toBaseUnitAmount(new BigNumber(1), wethTokenInfo.decimals);
 
-        // Send orderbook request to relayer and receive an OrderbookResponse instance
-        const orderbookResponse: OrderbookResponse = await relayerClient.getOrderbookAsync(orderbookRequest);
+            // Generate fees request for the order
+            const ONE_HOUR_IN_MS = 3600000;
+            const feesRequest: FeesRequest = {
+                exchangeContractAddress: EXCHANGE_ADDRESS,
+                maker: address,
+                taker: ZeroEx.NULL_ADDRESS,
+                makerTokenAddress: ZRX_ADDRESS,
+                takerTokenAddress: WETH_ADDRESS,
+                makerTokenAmount,
+                takerTokenAmount,
+                expirationUnixTimestampSec: new BigNumber(Date.now() + ONE_HOUR_IN_MS),
+                salt: ZeroEx.generatePseudoRandomSalt(),
+            };
 
-        // Because we are looking to exchange our ZRX for WETH, we get the bids side of the order book
-        // Sort them with the best rate first
-        const sortedBids = orderbookResponse.bids.sort((orderA, orderB) => {
-            const orderRateA = (new BigNumber(orderA.makerTokenAmount)).div(new BigNumber(orderA.takerTokenAmount));
-            const orderRateB = (new BigNumber(orderB.makerTokenAmount)).div(new BigNumber(orderB.takerTokenAmount));
-            return orderRateB.comparedTo(orderRateA);
-        });
+            // Send fees request to relayer and receive a FeesResponse instance
+            const feesResponse: FeesResponse = await relayerClient.getFeesAsync(feesRequest);
 
-        // Find the orders we need in order to fill 300 ZRX
-        const bidsToBeFilled: SignedOrder[] = [];
-        let zrxToBeFilled =  ZeroEx.toBaseUnitAmount(new BigNumber(300), zrxTokenInfo.decimals);
-        sortedBids.forEach(bid => {
-            if (zrxToBeFilled.greaterThan(0)) {
-                bidsToBeFilled.push(bid);
-                zrxToBeFilled = zrxToBeFilled.minus(bid.takerTokenAmount);
-            }
-        });
+            // Combine the fees request and response to from a complete order
+            const order: Order = {
+                ...feesRequest,
+                ...feesResponse,
+            };
 
-        // Calculate and print out the WETH/ZRX exchange rates
-        const rates = sortedBids.map(order => {
-            const rate = (new BigNumber(order.makerTokenAmount)).div(new BigNumber(order.takerTokenAmount));
-            return (rate.toString() + ' WETH/ZRX');
-        });
-        console.log(rates);
+            // Create orderHash
+            const orderHash = ZeroEx.getOrderHashHex(order);
 
-        // Get balances before the fill
-        const zrxBalanceBeforeFill = await zeroEx.token.getBalanceAsync(ZRX_ADDRESS, zrxOwnerAddress);
-        const wethBalanceBeforeFill = await zeroEx.token.getBalanceAsync(WETH_ADDRESS, zrxOwnerAddress);
-        console.log('ZRX Before: ' + ZeroEx.toUnitAmount(zrxBalanceBeforeFill, zrxTokenInfo.decimals).toString());
-        console.log('WETH Before: ' + ZeroEx.toUnitAmount(wethBalanceBeforeFill, wethTokenInfo.decimals).toString());
+            // Sign orderHash and produce a ecSignature
+            const ecSignature = await zeroEx.signOrderHashAsync(orderHash, address);
 
-        // Fill up to 300 ZRX worth of orders from the relayer
-        const zrxAmount = ZeroEx.toBaseUnitAmount(new BigNumber(300), zrxTokenInfo.decimals);
-        const fillTxHash = await zeroEx.exchange.fillOrdersUpToAsync(bidsToBeFilled, zrxAmount, true, zrxOwnerAddress);
-        await zeroEx.awaitTransactionMinedAsync(fillTxHash);
+            // Append signature to order
+            const signedOrder: SignedOrder = {
+                ...order,
+                ecSignature,
+            };
 
-        // Get balances after the fill
-        const zrxBalanceAfterFill = await zeroEx.token.getBalanceAsync(ZRX_ADDRESS, zrxOwnerAddress);
-        const wethBalanceAfterFill = await zeroEx.token.getBalanceAsync(WETH_ADDRESS, zrxOwnerAddress);
-        console.log('ZRX After: ' + ZeroEx.toUnitAmount(zrxBalanceAfterFill, zrxTokenInfo.decimals).toString());
-        console.log('WETH After: ' + ZeroEx.toUnitAmount(wethBalanceAfterFill, wethTokenInfo.decimals).toString());
+            // Submit order to relayer
+            await relayerClient.submitOrderAsync(signedOrder);
+        }));
     } catch (err) {
         console.log(err);
     }
