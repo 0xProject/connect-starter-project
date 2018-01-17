@@ -5,7 +5,10 @@ import {
     OrderbookChannelSubscriptionOpts,
     WebSocketOrderbookChannel,
 } from '@0xproject/connect';
-import {ZeroEx} from '0x.js';
+import {
+    ZeroEx,
+    ZeroExConfig,
+} from '0x.js';
 import {CustomOrderbookChannelHandler} from './custom_orderbook_channel_handler';
 
 const mainAsync = async () => {
@@ -14,16 +17,30 @@ const mainAsync = async () => {
         const provider = new Web3.providers.HttpProvider('http://localhost:8545');
 
         // Instantiate 0x.js instance
-        const zeroEx = new ZeroEx(provider);
+        const zeroExConfig: ZeroExConfig = {
+            networkId: 50, // testrpc
+        };
+        const zeroEx = new ZeroEx(provider, zeroExConfig);
 
         // Instantiate an orderbook channel pointing to a local server on port 3001
-        const relayerWsApiUrl = 'http://localhost:3001';
+        const relayerWsApiUrl = 'http://localhost:3001/v0';
         const orderbookChannel: OrderbookChannel = new WebSocketOrderbookChannel(relayerWsApiUrl);
 
-        // Get contract addresses
-        const WETH_ADDRESS = await zeroEx.etherToken.getContractAddressAsync();
-        const ZRX_ADDRESS = await zeroEx.exchange.getZRXTokenAddressAsync();
-        const EXCHANGE_ADDRESS = await zeroEx.exchange.getContractAddressAsync();
+        // Get exchange contract address
+        const EXCHANGE_ADDRESS = await zeroEx.exchange.getContractAddress();
+
+        // Get token information
+        const wethTokenInfo = await zeroEx.tokenRegistry.getTokenBySymbolIfExistsAsync('WETH');
+        const zrxTokenInfo = await zeroEx.tokenRegistry.getTokenBySymbolIfExistsAsync('ZRX');
+
+        // Check if either getTokenBySymbolIfExistsAsync query resulted in undefined
+        if (wethTokenInfo === undefined || zrxTokenInfo === undefined) {
+            throw new Error('could not find token info');
+        }
+
+        // Get token contract addresses
+        const WETH_ADDRESS = wethTokenInfo.address;
+        const ZRX_ADDRESS = zrxTokenInfo.address;
 
         // Generate OrderbookChannelSubscriptionOpts for watching the ZRX/WETH orderbook
         const zrxWethSubscriptionOpts: OrderbookChannelSubscriptionOpts = {

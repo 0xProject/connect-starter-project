@@ -7,7 +7,10 @@ import {
     Order,
     SignedOrder,
 } from '@0xproject/connect';
-import {ZeroEx} from '0x.js';
+import {
+    ZeroEx,
+    ZeroExConfig,
+} from '0x.js';
 
 const mainAsync = async () => {
     try {
@@ -15,24 +18,29 @@ const mainAsync = async () => {
         const provider = new Web3.providers.HttpProvider('http://localhost:8545');
 
         // Instantiate 0x.js instance
-        const zeroEx = new ZeroEx(provider);
+        const zeroExConfig: ZeroExConfig = {
+            networkId: 50, // testrpc
+        };
+        const zeroEx = new ZeroEx(provider, zeroExConfig);
         // Instantiate relayer client pointing to a local server on port 3000
-        const relayerHttpApiUrl = 'http://localhost:3000';
+        const relayerHttpApiUrl = 'http://localhost:3000/v0';
         const relayerClient = new HttpClient(relayerHttpApiUrl);
 
-        // Get contract addresses
-        const WETH_ADDRESS = await zeroEx.etherToken.getContractAddressAsync();
-        const ZRX_ADDRESS = await zeroEx.exchange.getZRXTokenAddressAsync();
-        const EXCHANGE_ADDRESS = await zeroEx.exchange.getContractAddressAsync();
+        // Get exchange contract address
+        const EXCHANGE_ADDRESS = await zeroEx.exchange.getContractAddress();
 
         // Get token information
-        const wethTokenInfo = await zeroEx.tokenRegistry.getTokenIfExistsAsync(WETH_ADDRESS);
-        const zrxTokenInfo = await zeroEx.tokenRegistry.getTokenIfExistsAsync(ZRX_ADDRESS);
+        const wethTokenInfo = await zeroEx.tokenRegistry.getTokenBySymbolIfExistsAsync('WETH');
+        const zrxTokenInfo = await zeroEx.tokenRegistry.getTokenBySymbolIfExistsAsync('ZRX');
 
-        // Check if either getTokenIfExistsAsync query resulted in undefined
+        // Check if either getTokenBySymbolIfExistsAsync query resulted in undefined
         if (wethTokenInfo === undefined || zrxTokenInfo === undefined) {
             throw new Error('could not find token info');
         }
+
+        // Get token contract addresses
+        const WETH_ADDRESS = wethTokenInfo.address;
+        const ZRX_ADDRESS = zrxTokenInfo.address;
 
         // Get all available addresses
         const addresses = await zeroEx.getAvailableAddressesAsync();
@@ -64,7 +72,7 @@ const mainAsync = async () => {
         // Deposit ETH and generate WETH tokens for each address in wethOwnerAddresses
         const ethToConvert = ZeroEx.toBaseUnitAmount(new BigNumber(5), wethTokenInfo.decimals);
         const depositTxHashes = await Promise.all(wethOwnerAddresses.map(address => {
-            return zeroEx.etherToken.depositAsync(ethToConvert, address);
+            return zeroEx.etherToken.depositAsync(WETH_ADDRESS, ethToConvert, address);
         }));
         await Promise.all(depositTxHashes.map(tx => {
             return zeroEx.awaitTransactionMinedAsync(tx);
@@ -72,7 +80,7 @@ const mainAsync = async () => {
 
         // Generate and submit orders with increasing ZRX/WETH exchange rate
         await Promise.all(wethOwnerAddresses.map(async (address, index) => {
-            // Progrommatically determine the exchange rate based on the index of address in wethOwnerAddresses
+            // Programmatically determine the exchange rate based on the index of address in wethOwnerAddresses
             const exchangeRate = (index + 1) * 10; // ZRX/WETH
             const makerTokenAmount = ZeroEx.toBaseUnitAmount(new BigNumber(5), wethTokenInfo.decimals);
             const takerTokenAmount = makerTokenAmount.mul(exchangeRate);
