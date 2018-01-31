@@ -97,7 +97,7 @@ const mainAsync = async () => {
             const orderHash = ZeroEx.getOrderHashHex(order);
 
             // Sign orderHash and produce a ecSignature
-            const ecSignature = await zeroEx.signOrderHashAsync(orderHash, zrxOwnerAddress);
+            const ecSignature = await zeroEx.signOrderHashAsync(orderHash, zrxOwnerAddress, false);
 
             // Append signature to order
             const signedOrder: SignedOrder = {

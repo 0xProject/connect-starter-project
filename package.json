@@ -32,8 +32,8 @@
     "web3-typescript-typings": "^0.9.4"
   },
   "dependencies": {
-    "0x.js": "~0.30.0",
-    "@0xproject/connect": "~0.5.0",
+    "0x.js": "~0.31.0",
+    "@0xproject/connect": "~0.5.3",
     "bignumber.js": "~4.1.0",
     "body-parser": "^1.18.2",
     "ethereumjs-testrpc": "6.0.3",
