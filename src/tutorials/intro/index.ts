@@ -137,16 +137,6 @@ const mainAsync = async () => {
             return orderRateB.comparedTo(orderRateA);
         });
 
-        // Find the orders we need in order to fill 300 ZRX
-        const bidsToBeFilled: SignedOrder[] = [];
-        let zrxToBeFilled =  ZeroEx.toBaseUnitAmount(new BigNumber(300), zrxTokenInfo.decimals);
-        sortedBids.forEach(bid => {
-            if (zrxToBeFilled.greaterThan(0)) {
-                bidsToBeFilled.push(bid);
-                zrxToBeFilled = zrxToBeFilled.minus(bid.takerTokenAmount);
-            }
-        });
-
         // Calculate and print out the WETH/ZRX exchange rates
         const rates = sortedBids.map(order => {
             const rate = (new BigNumber(order.makerTokenAmount)).div(new BigNumber(order.takerTokenAmount));
@@ -160,9 +150,9 @@ const mainAsync = async () => {
         console.log('ZRX Before: ' + ZeroEx.toUnitAmount(zrxBalanceBeforeFill, zrxTokenInfo.decimals).toString());
         console.log('WETH Before: ' + ZeroEx.toUnitAmount(wethBalanceBeforeFill, wethTokenInfo.decimals).toString());
 
-        // Fill up to 300 ZRX worth of orders from the relayer
-        const zrxAmount = ZeroEx.toBaseUnitAmount(new BigNumber(300), zrxTokenInfo.decimals);
-        const fillTxHash = await zeroEx.exchange.fillOrdersUpToAsync(bidsToBeFilled, zrxAmount, true, zrxOwnerAddress);
+        // Completely fill the best bid
+        const bidToFill = sortedBids[0];
+        const fillTxHash = await zeroEx.exchange.fillOrderAsync(bidToFill, bidToFill.takerTokenAmount, true, zrxOwnerAddress);
         await zeroEx.awaitTransactionMinedAsync(fillTxHash);
 
         // Get balances after the fill
