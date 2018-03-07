@@ -2,7 +2,7 @@
 
 ---
 
-# @0xproject/connect Starter Project
+# DEPRECATED
 -----------------------
 
-This is a @0xproject/connect starter project used in [the Connect tutorials](https://0xproject.com/wiki#connect) published in the 0x wiki. The instructions on how to get started can be found there.
+This is project is DEPRECATED and has been consolidated into the [0x starter project](https://github.com/0xProject/0x-starter-project)
